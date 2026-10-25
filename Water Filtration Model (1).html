@@ -1,0 +1,489 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Water Filtration Model</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: full-screen 3D stage; title + legend float top-left, control dock floats bottom-center, part tags are projected over the canvas. Single light look on purpose (a lab-bench model). */
+:root{
+  --bg:#e6edf2; --bg-hi:#f8fafc; --ink:#14202b; --muted:#566a7d;
+  --panel:rgba(255,255,255,.86); --line:rgba(20,32,43,.16); --accent:#0b79c9; --accent-ink:#ffffff;
+  --raw:#8fb5d3; --clean:#1e9bff; --dirty:#a3daff; --sensor:#16a34a;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{margin:0;position:relative;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans)}
+#stage{position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 30%,var(--bg-hi) 0%,var(--bg) 70%)}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.tag{position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;white-space:nowrap;font:500 11px/1 var(--mono);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 8px;will-change:transform}
+.tag i{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+.tag.sub{font-size:10px;padding:3px 7px;color:var(--muted)}
+.tag.sub i{background:var(--muted)}
+.head{position:absolute;top:14px;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));pointer-events:none;display:flex;flex-direction:column;gap:8px;max-width:360px}
+h1{margin:0;font-size:19px;line-height:1.2;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+.head p{margin:0;font-size:13px;line-height:1.4;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font:500 11px/1 var(--mono);color:var(--muted);margin-top:2px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend b{width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.15)}
+.dock{position:absolute;bottom:max(14px,env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 12px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);max-width:calc(100% - 32px);box-sizing:border-box}
+.dock button{font:500 13px/1 var(--sans);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer;min-height:34px}
+.dock button:hover{border-color:var(--accent)}
+.dock button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.dock button:focus-visible,.dock input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;gap:0}
+.seg button{border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:9px 0 0 9px;margin-left:0}
+.seg button:last-child{border-radius:0 9px 9px 0}
+.sp{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.sp input{width:96px;accent-color:var(--accent)}
+.hint{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:16px;font:500 11px/1 var(--mono);color:var(--muted);pointer-events:none}
+@media (max-width:640px){.hint{display:none}.tag{font-size:10px;padding:3px 6px}.tag.sub{display:none}h1{font-size:17px}}
+</style>
+
+<div id="stage"></div>
+<div id="labels" aria-hidden="true"></div>
+
+<div class="head">
+  <h1>Water Filtration Model</h1>
+  <p id="status">Filter good: clean water moves on to the checking tank, the storage tank and the plant bed.</p>
+  <div class="legend">
+    <span><b style="background:var(--raw)"></b>raw water</span>
+    <span><b style="background:var(--clean)"></b>filtered water</span>
+    <span><b style="background:var(--dirty)"></b>dirty water to drain</span>
+  </div>
+</div>
+<div class="hint">drag to rotate · scroll to zoom</div>
+
+<div class="dock" role="toolbar" aria-label="Model controls">
+  <span class="seg" role="group" aria-label="Filter condition">
+    <button id="fGood" type="button" aria-pressed="true">Filter good</button>
+    <button id="fBad" type="button" aria-pressed="false">Filter broken</button>
+  </span>
+  <button id="bPlay" type="button" aria-pressed="true">Water flowing</button>
+  <label class="sp" for="speed">Speed <input id="speed" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
+  <button id="bLabels" type="button" aria-pressed="true">Labels</button>
+  <button id="bSpin" type="button" aria-pressed="false">Spin</button>
+  <span class="seg" role="group" aria-label="Camera view">
+    <button type="button" data-view="front">Front</button>
+    <button type="button" data-view="angle">Angle</button>
+    <button type="button" data-view="top">Top</button>
+  </span>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+
+/* ---------- renderer / scene ---------- */
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.75;
+
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 120);
+const TARGET = new THREE.Vector3(0.2, 2.35, 0);
+
+const sun = new THREE.DirectionalLight(0xffffff, 2.1);
+sun.position.set(5, 9, 7);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, {left:-9, right:9, top:7, bottom:-7, near:1, far:30});
+sun.shadow.bias = -0.0005;
+scene.add(sun, new THREE.HemisphereLight(0xffffff, 0xaebdca, 0.5));
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({opacity:0.16}));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+const root = new THREE.Group(); scene.add(root);
+
+/* ---------- helpers ---------- */
+const rng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const R = rng(11);
+const V = (x,y,z) => new THREE.Vector3(x,y,z);
+
+const std = (c, o={}) => new THREE.MeshStandardMaterial({color:c, roughness:.6, metalness:0, ...o});
+const glossWhite = new THREE.MeshPhysicalMaterial({color:0xffffff, roughness:.2, clearcoat:1, clearcoatRoughness:.06});
+const chrome = new THREE.MeshStandardMaterial({color:0xe3e9ee, metalness:1, roughness:.16});
+const glass = (c, op) => new THREE.MeshPhysicalMaterial({color:c, transparent:true, opacity:op, roughness:.05, side:THREE.DoubleSide, depthWrite:false});
+const water = (c, op) => new THREE.MeshPhysicalMaterial({color:c, transparent:true, opacity:op, roughness:.02, clearcoat:1, depthWrite:false});
+
+function box(x0,x1,y0,y1,z0,z1, material, {round=0, cast=true, order=0, parent=root} = {}){
+  const w=x1-x0, h=y1-y0, d=z1-z0;
+  const g = round ? new RoundedBoxGeometry(w,h,d,5,round) : new THREE.BoxGeometry(w,h,d);
+  const m = new THREE.Mesh(g, material);
+  m.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2);
+  m.castShadow = cast && !material.transparent;
+  m.receiveShadow = !material.transparent;
+  m.renderOrder = order;
+  parent.add(m); return m;
+}
+function edges(mesh, color=0x1b2a38, opacity=.4){
+  const l = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 35), new THREE.LineBasicMaterial({color, transparent:true, opacity}));
+  mesh.add(l); return l;
+}
+const Yaxis = V(0,1,0);
+function pipe(pts, r, material, {joints=true, order=6} = {}){
+  const g = new THREE.Group();
+  for(let i=0;i<pts.length-1;i++){
+    const a=V(...pts[i]), b=V(...pts[i+1]), dir=b.clone().sub(a), len=dir.length();
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,24,1,true), material);
+    m.position.copy(a).add(b).multiplyScalar(.5);
+    m.quaternion.setFromUnitVectors(Yaxis, dir.normalize());
+    m.renderOrder = order; g.add(m);
+  }
+  if(joints) for(let i=1;i<pts.length-1;i++){
+    const s = new THREE.Mesh(new THREE.SphereGeometry(r,18,14), material);
+    s.position.set(...pts[i]); s.renderOrder = order; g.add(s);
+  }
+  root.add(g); return g;
+}
+function rrPath(p,w,d,r){
+  const x=-w/2, y=-d/2;
+  p.moveTo(x+r,y); p.lineTo(x+w-r,y); p.absarc(x+w-r,y+r,r,-Math.PI/2,0);
+  p.lineTo(x+w,y+d-r); p.absarc(x+w-r,y+d-r,r,0,Math.PI/2);
+  p.lineTo(x+r,y+d); p.absarc(x+r,y+d-r,r,Math.PI/2,Math.PI);
+  p.lineTo(x,y+r); p.absarc(x+r,y+r,r,Math.PI,Math.PI*1.5);
+  return p;
+}
+
+/* ---------- materials ---------- */
+const tableTop = std(0xdde3e8, {roughness:.5});
+const tableLeg = std(0xcbd3da, {roughness:.6});
+const pipeGlass = glass(0xcfd9e2, .3);
+const bigPipeGlass = glass(0xd6cfc6, .34);
+const tankGlass = glass(0xdaf0ff, .16);
+const filterGlass = glass(0x86cfff, .26);
+const sensorGreen = new THREE.MeshPhysicalMaterial({color:0x16a34a, roughness:.3, clearcoat:1, clearcoatRoughness:.1});
+
+/* ---------- table ---------- */
+box(-4.13,4.14, 1.02,1.20, -1.1,1.1, tableTop, {round:.015});
+box(-4.13,-3.95, 0,1.02, -1.0,1.0, tableLeg);
+box(3.96,4.14, 0,1.02, -1.0,1.0, tableLeg);
+
+/* ---------- sink (white, rounded) + tap ---------- */
+const SX = -3.31;
+box(-3.95,-2.67, 3.03,3.15, -.5,.5, glossWhite, {round:.05});
+{
+  const outer = rrPath(new THREE.Shape(), 1.23, .95, .2);
+  outer.holes.push(rrPath(new THREE.Path(), 1.23-.08, .95-.08, .15));
+  const g = new THREE.ExtrudeGeometry(outer, {depth:.30, bevelEnabled:true, bevelThickness:.025, bevelSize:.025, bevelSegments:6, curveSegments:18});
+  g.rotateX(-Math.PI/2);
+  const ring = new THREE.Mesh(g, glossWhite);
+  ring.position.set(SX, 3.175, 0); ring.castShadow = ring.receiveShadow = true; root.add(ring);
+}
+// sink legs
+for(const x of [-3.86,-2.76]) for(const z of [-.4,.4]) box(x-.04,x+.04, 1.20,3.03, z-.04,z+.04, glossWhite);
+// raw water in the basin
+box(SX-.53,SX+.53, 3.15,3.31, -.39,.39, water(0x8fb5d3,.75), {order:2});
+// tap
+pipe([[-3.7,3.46,-.46],[-3.7,4.0,-.46],[-3.3,4.0,-.46],[-3.3,4.0,-.05],[-3.3,3.76,-.05]], .055, chrome, {order:1}).children.forEach(m=>{m.castShadow=true});
+{ // tap spout collar
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,.06,20), chrome); c.position.set(-3.3,3.78,-.05); root.add(c);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(.1,.1,.05,20), chrome); base.position.set(-3.7,3.50,-.46); root.add(base);
+}
+// outlet from sink to filter
+pipe([[-2.85,3.16,0],[-2.85,2.93,0],[-1.78,2.93,0],[-1.78,2.62,0]], .075, pipeGlass);
+
+/* ---------- filtration unit ---------- */
+{
+  const shell = box(-2.15,-1.42, 1.20,2.76, -.4,.4, filterGlass, {order:5}); edges(shell, 0x1c4a6e, .5);
+  // raw water sitting on top of the cotton
+  box(-2.12,-1.45, 2.52,2.66, -.37,.37, water(0xa8bfcf,.7), {order:3});
+  const X0=-2.1, X1=-1.47, Z0=-.31, Z1=.31;
+  const scatter = (geo,n,y0,y1,sMin,sMax,palette,flat,mat) => {
+    const im = new THREE.InstancedMesh(geo, mat, n), d = new THREE.Object3D(), c = new THREE.Color();
+    for(let i=0;i<n;i++){
+      d.position.set(X0+R()*(X1-X0), y0+R()*(y1-y0), Z0+R()*(Z1-Z0));
+      d.rotation.set(R()*6,R()*6,R()*6);
+      const s = sMin+R()*(sMax-sMin);
+      d.scale.set(s*(.85+R()*.35), s*flat*(.85+R()*.35), s*(.85+R()*.35));
+      d.updateMatrix(); im.setMatrixAt(i,d.matrix);
+      c.set(palette[(R()*palette.length)|0]); c.offsetHSL(0,0,(R()-.5)*.06); im.setColorAt(i,c);
+    }
+    im.castShadow = false; im.receiveShadow = true; root.add(im);
+  };
+  const rock = new THREE.IcosahedronGeometry(1,1);
+  const rockMat = std(0xffffff, {roughness:.92, flatShading:true});
+  scatter(rock, 40, 1.29,1.60, .085,.115, [0x6c7176,0x8b9095,0x5a5f65,0x9aa0a4,0x7a6f66], .8, rockMat);       // stones
+  scatter(rock, 320, 1.66,1.96, .035,.05, [0xb9a98a,0xa89a82,0x8d8574,0xc8bca2,0x9a9488,0xd0c3a5], .85, rockMat); // gravel
+  const puff = new THREE.SphereGeometry(1,12,10);
+  scatter(puff, 55, 2.33,2.48, .09,.12, [0xffffff,0xfbfaf4,0xf3f1ea], .62, std(0xffffff,{roughness:1}));      // cotton
+  // mesh sheets
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0,0,64,7); cx.fillRect(0,0,7,64);
+  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(8,8);
+  const meshMat = new THREE.MeshStandardMaterial({color:0x7e8993, map:tex, alphaTest:.5, side:THREE.DoubleSide, metalness:.5, roughness:.4});
+  for(const y of [2.04,2.12,2.20]){
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(.63,.63).rotateX(-Math.PI/2), meshMat); p.position.set(-1.785,y,0); root.add(p);
+  }
+}
+// filter outlet to checking tank
+pipe([[-1.55,1.35,0],[-.7,1.35,0]], .075, pipeGlass);
+
+/* ---------- checking tank + green sensor ---------- */
+{
+  const shell = box(-.92,.46, 1.20,2.67, -.6,.6, tankGlass, {order:5}); edges(shell, 0x24425c, .5);
+  box(-.87,.41, 1.25,2.02, -.55,.55, water(0x2f9cf0,.58), {order:3});
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,.1,20), sensorGreen); neck.position.set(-.23,2.72,0); neck.castShadow = true; root.add(neck);
+  const body = box(-.42,-.04, 2.76,3.06, -.19,.19, sensorGreen, {round:.03});
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(.028,.028,.98,16), sensorGreen); rod.position.set(-.23,2.30,0); rod.castShadow = true; root.add(rod);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(.04,14,10), sensorGreen); tip.position.set(-.23,1.81,0); root.add(tip);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(.22,.1), new THREE.MeshBasicMaterial({color:0x0b2a18})); screen.position.set(-.3,2.92,.192); root.add(screen);
+  globalThis.__led = new THREE.Mesh(new THREE.CircleGeometry(.032,18), new THREE.MeshBasicMaterial({color:0x7dffa6, transparent:true}));
+  __led.position.set(-.12,2.92,.194); root.add(__led);
+}
+// checking tank -> storage tank, with union fitting
+pipe([[.3,1.35,0],[1.25,1.35,0]], .075, pipeGlass);
+{
+  const nut = new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.14,6), chrome); nut.rotation.z = Math.PI/2; nut.position.set(.72,1.35,0); nut.castShadow = true; root.add(nut);
+  for(const dx of [-.11,.11]){ const r = new THREE.Mesh(new THREE.CylinderGeometry(.095,.095,.05,22), chrome); r.rotation.z = Math.PI/2; r.position.set(.72+dx,1.35,0); root.add(r); }
+}
+
+/* ---------- storage tank ---------- */
+{
+  const shell = box(1.02,2.30, 1.20,2.67, -.6,.6, tankGlass, {order:5}); edges(shell, 0x24425c, .5);
+  box(1.07,2.25, 1.25,2.56, -.55,.55, water(0x64c2ff,.5), {order:3});
+}
+
+/* ---------- main outlet, faucets, plant bed ---------- */
+pipe([[2.15,2.13,0],[3.5,2.13,0],[3.5,1.91,0]], .075, pipeGlass);
+pipe([[3.15,2.13,0],[3.15,1.91,0]], .075, pipeGlass);
+for(const x of [3.15,3.5]){
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(.115,.095,.035,28), chrome); head.position.set(x,1.89,0); head.castShadow = true; root.add(head);
+}
+{ // bed
+  const wall = std(0xeef1f4, {roughness:.55});
+  box(2.85,3.96, 1.20,1.26, -.55,.55, wall);
+  box(2.85,2.90, 1.20,1.61, -.55,.55, wall); box(3.91,3.96, 1.20,1.61, -.55,.55, wall);
+  box(2.85,3.96, 1.20,1.61, -.55,-.50, wall); box(2.85,3.96, 1.20,1.61, .50,.55, wall);
+  box(2.90,3.91, 1.26,1.50, -.5,.5, std(0x5e4330,{roughness:1}));
+  for(const x of [3.15,3.5]){ // wet soil under each faucet
+    const w = new THREE.Mesh(new THREE.CircleGeometry(.16,24).rotateX(-Math.PI/2), new THREE.MeshStandardMaterial({color:0x2e2016, roughness:.5, transparent:true, opacity:.75})); w.position.set(x,1.502,0); root.add(w);
+  }
+}
+const plants = [];
+{
+  const leafGeo = new THREE.SphereGeometry(1,10,8);
+  const leafMats = [std(0x3f9d46),std(0x4caf50),std(0x2f8a3d)];
+  const stemMat = std(0x3a7d3a);
+  const spots = [[3.0,-.3,.34],[3.3,-.32,.42],[3.65,-.3,.38],[3.86,-.28,.3],[3.0,.3,.4],[3.3,.32,.32],[3.66,.31,.44],[3.87,.3,.36],[3.33,0.0,.26],[3.82,0.02,.28]];
+  spots.forEach(([x,z,h],k)=>{
+    const g = new THREE.Group(); g.position.set(x,1.5,z);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(.011,.018,h,6), stemMat); stem.position.y = h/2; g.add(stem);
+    for(let i=0;i<7;i++){
+      const f = i/7, a = i*2.4 + k;
+      const leaf = new THREE.Mesh(leafGeo, leafMats[i%3]); leaf.castShadow = true;
+      leaf.scale.set(.1-.02*f, .016, .05-.01*f);
+      leaf.position.set(Math.cos(a)*.06*(1-f*.4), h*(.3+.7*f), Math.sin(a)*.06*(1-f*.4));
+      leaf.rotation.order = 'YZX'; leaf.rotation.y = -a; leaf.rotation.z = .55 - .35*f;
+      g.add(leaf);
+    }
+    const bud = new THREE.Mesh(new THREE.SphereGeometry(.035,10,8), leafMats[1]); bud.position.y = h; g.add(bud);
+    root.add(g); plants.push({g, ph:k*1.3});
+  });
+}
+
+/* ---------- drain: pipe under the table to a floor drain ---------- */
+const DZ = .3;
+pipe([[-1.6,1.40,DZ],[-1.6,.51,DZ],[4.5,.51,DZ],[4.5,.10,DZ]], .11, bigPipeGlass);
+{
+  const pl = box(4.12,4.88, 0,.035, DZ-.38,DZ+.38, std(0x8b95a0,{metalness:.7,roughness:.35}));
+  box(4.22,4.78, .035,.04, DZ-.28,DZ+.28, std(0x1a1f25,{roughness:.9}));
+  for(let i=0;i<6;i++) box(4.24,4.76, .04,.06, DZ-.26+i*.104, DZ-.26+i*.104+.035, std(0xaab4be,{metalness:.8,roughness:.3}));
+}
+
+/* ---------- falling streams (animated texture) ---------- */
+const stripe = (() => {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 128; const g = c.getContext('2d');
+  for(let i=0;i<22;i++){ const y = R()*128, h = 8+R()*26; const gr = g.createLinearGradient(0,y,0,y+h); gr.addColorStop(0,'rgba(255,255,255,0)'); gr.addColorStop(.5,`rgba(255,255,255,${.55+R()*.4})`); gr.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(2,y,12,h); }
+  g.fillStyle = 'rgba(255,255,255,.28)'; g.fillRect(4,0,8,128);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1,2); return t;
+})();
+function stream(x,yTop,yBot,z,r,color){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r*1.15,yTop-yBot,14,1,true), new THREE.MeshBasicMaterial({color, map:stripe, transparent:true, opacity:.85, depthWrite:false, side:THREE.DoubleSide}));
+  m.position.set(x,(yTop+yBot)/2,z); m.renderOrder = 8; root.add(m); return m;
+}
+stream(-3.3, 3.76, 3.31, -.05, .03, 0xa9cbe6);
+const faucetStreams = [stream(3.15, 1.87, 1.51, 0, .022, 0x6fc4ff), stream(3.5,  1.87, 1.51, 0, .022, 0x6fc4ff)];
+
+const ripples = [];
+function ripple(x,y,z,color){
+  const m = new THREE.Mesh(new THREE.RingGeometry(.85,1,32).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color, transparent:true, opacity:.6, depthWrite:false}));
+  m.position.set(x,y,z); m.renderOrder = 9; root.add(m); ripples.push({m, ph:R()}); return m;
+}
+ripple(-3.3,3.315,-.05,0xdcefff); ripple(-3.3,3.315,-.05,0xdcefff);
+const faucetRipples = [ripple(3.15,1.51,0,0xbfe6ff), ripple(3.15,1.51,0,0xbfe6ff), ripple(3.5,1.51,0,0xbfe6ff), ripple(3.5,1.51,0,0xbfe6ff)];
+
+/* ---------- flowing particles ---------- */
+class Path{
+  constructor(pts){ this.p = pts.map(a=>V(...a)); this.cum = [0]; for(let i=1;i<this.p.length;i++) this.cum.push(this.cum[i-1]+this.p[i].distanceTo(this.p[i-1])); this.len = this.cum.at(-1); }
+  at(s, out){ let i = 1; while(i<this.cum.length-1 && this.cum[i]<s) i++; const k = (s-this.cum[i-1])/(this.cum[i]-this.cum[i-1]); return out.lerpVectors(this.p[i-1], this.p[i], Math.min(Math.max(k,0),1)); }
+}
+const flows = [];
+function flow({pts, count, speed, size=.028, color, spread=.03}){
+  const path = new Path(pts);
+  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(size,8,6), new THREE.MeshBasicMaterial({transparent:true, opacity:.92, depthTest:false}), count);
+  mesh.frustumCulled = false; mesh.renderOrder = 20;
+  const s0 = [], jit = [];
+  for(let i=0;i<count;i++){ s0.push(i/count*path.len); jit.push(V((R()-.5)*2*spread,(R()-.5)*2*spread,(R()-.5)*2*spread)); mesh.setColorAt(i, new THREE.Color(0xffffff)); }
+  const d = new THREE.Object3D(), p = new THREE.Vector3(), c = new THREE.Color();
+  root.add(mesh);
+  const f = { path, mesh, update(t){
+    for(let i=0;i<count;i++){
+      const s = (s0[i] + t*speed) % path.len;
+      path.at(s, p).add(jit[i]); d.position.copy(p); d.updateMatrix(); mesh.setMatrixAt(i, d.matrix);
+      color(s, path, c); mesh.setColorAt(i, c);
+    }
+    mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true;
+  }};
+  flows.push(f); return f;
+}
+const RAW = new THREE.Color(0x9ab8cf), CLEAN = new THREE.Color(0x1e9bff), DIRTY = new THREE.Color(0xa3daff);
+const mainGood = flow({
+  pts:[[-3.3,3.76,-.05],[-3.3,3.30,-.05],[-3.0,3.22,0],[-2.85,3.2,0],[-2.85,2.93,0],[-1.78,2.93,0],[-1.78,2.62,0],[-1.78,1.35,0],[1.45,1.35,0],[2.2,2.13,0],[3.5,2.13,0],[3.5,1.56,0]],
+  count:90, speed:1.0,
+  color:(s,path,c)=>{ const a = path.cum[6], b = path.cum[7]; c.copy(RAW).lerp(CLEAN, Math.min(Math.max((s-a)/(b-a),0),1)); }
+});
+const branchB = flow({ pts:[[2.4,2.13,0],[3.15,2.13,0],[3.15,1.56,0]], count:18, speed:1.0, color:(s,p,c)=>c.copy(CLEAN) });
+const badFlow = flow({
+  pts:[[-3.3,3.76,-.05],[-3.3,3.30,-.05],[-3.0,3.22,0],[-2.85,3.2,0],[-2.85,2.93,0],[-1.78,2.93,0],[-1.78,2.62,0],[-1.78,1.35,0],[-1.6,1.30,DZ],[-1.6,.51,DZ],[4.5,.51,DZ],[4.5,.08,DZ]],
+  count:100, speed:1.0, size:.03, spread:.04,
+  color:(s,path,c)=>{ const a = path.cum[6], b = path.cum[7]; c.copy(RAW).lerp(DIRTY, Math.min(Math.max((s-a)/(b-a),0),1)); }
+});
+
+/* ---------- labels ---------- */
+const labelsEl = document.getElementById('labels');
+const LABELS = [
+  {t:'Sink & tap', p:[-3.3,4.1,-.05], d:'up'},
+  {t:'Filtration unit', p:[-1.78,2.8,0], d:'up'},
+  {t:'Quality sensor', p:[-.23,3.08,0], d:'up'},
+  {t:'Checking tank', p:[.2,1.2,.62], d:'down'},
+  {t:'Storage tank', p:[1.66,2.67,0], d:'up'},
+  {t:'Faucets', p:[3.32,2.15,0], d:'up'},
+  {t:'Plant bed', p:[3.4,1.2,.56], d:'down'},
+  {t:'Drain', p:[2.2,.51,.4], d:'down'},
+  {t:'Cotton', p:[-2.17,2.41,0], d:'left', sub:1},
+  {t:'Mesh', p:[-2.17,2.15,0], d:'left', sub:1},
+  {t:'Gravel', p:[-2.17,1.82,0], d:'left', sub:1},
+  {t:'Stones', p:[-2.17,1.46,0], d:'left', sub:1},
+];
+const tags = LABELS.map(l=>{ const e = document.createElement('div'); e.className = 'tag'+(l.sub?' sub':''); e.innerHTML = '<i></i><span></span>'; e.lastChild.textContent = l.t; labelsEl.appendChild(e); return {l, e, v:V(...l.p)}; });
+let showLabels = stage.clientWidth > 640;
+const tmp = new THREE.Vector3();
+function placeLabels(){
+  const w = stage.clientWidth, h = stage.clientHeight;
+  for(const {l,e,v} of tags){
+    tmp.copy(v).project(camera);
+    const vis = showLabels && tmp.z < 1;
+    e.style.visibility = vis ? 'visible' : 'hidden';
+    if(!vis) continue;
+    const x = (tmp.x*.5+.5)*w, y = (-tmp.y*.5+.5)*h;
+    const off = l.d==='up' ? 'translate(-50%,calc(-100% - 6px))' : l.d==='down' ? 'translate(-50%,6px)' : 'translate(calc(-100% - 4px),-50%)';
+    e.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) ${off}`;
+  }
+}
+
+/* ---------- camera, controls, UI ---------- */
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(TARGET); controls.enableDamping = true; controls.dampingFactor = .08;
+controls.minDistance = 3; controls.maxDistance = 30; controls.maxPolarAngle = Math.PI/2 - .02;
+controls.autoRotateSpeed = 1.2;
+
+function fitDist(){
+  const vf = THREE.MathUtils.degToRad(camera.fov), hf = 2*Math.atan(Math.tan(vf/2)*camera.aspect);
+  return Math.max(4.6/Math.tan(hf/2), 3.2/Math.tan(vf/2));
+}
+function viewPos(name){
+  const d = fitDist();
+  const dir = name==='front' ? V(0,.12,1) : name==='top' ? V(0,1,.07) : V(.5,.4,1);
+  return dir.normalize().multiplyScalar(d*(name==='angle'?1.05:1)).add(TARGET);
+}
+let tween = null;
+function goView(name, instant){
+  const to = viewPos(name);
+  if(instant){ camera.position.copy(to); controls.target.copy(TARGET); return; }
+  tween = {from:camera.position.clone(), to, t:0};
+}
+controls.addEventListener('start', ()=>{ tween = null; });
+
+function resize(){
+  const w = stage.clientWidth, h = stage.clientHeight; if(!w||!h) return;
+  renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize(); goView('angle', true);
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let playing = !reduce, speed = 1, flowT = 0;
+const bPlay = document.getElementById('bPlay'), bLabels = document.getElementById('bLabels'), bSpin = document.getElementById('bSpin'), spd = document.getElementById('speed');
+const setPlay = v => { playing = v; bPlay.setAttribute('aria-pressed', String(v)); bPlay.textContent = v ? 'Water flowing' : 'Water paused'; };
+setPlay(playing);
+bPlay.onclick = () => setPlay(!playing);
+spd.oninput = () => { speed = +spd.value; };
+bLabels.setAttribute('aria-pressed', String(showLabels));
+bLabels.onclick = () => { showLabels = !showLabels; bLabels.setAttribute('aria-pressed', String(showLabels)); };
+bSpin.onclick = () => { controls.autoRotate = !controls.autoRotate; bSpin.setAttribute('aria-pressed', String(controls.autoRotate)); };
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => goView(b.dataset.view));
+
+/* ---------- filter condition ---------- */
+const crack = new THREE.Group();
+for(const pts of [[[-2.02,2.72],[-1.9,2.46],[-2.03,2.26],[-1.86,2.02],[-1.97,1.82],[-1.8,1.6]],[[-1.86,2.02],[-1.7,1.9],[-1.62,1.7]]]){
+  crack.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(([x,y])=>V(x,y,.404))), new THREE.LineBasicMaterial({color:0x8a1f12})));
+}
+crack.visible = false; root.add(crack);
+const filterTag = tags.find(t=>t.l.t==='Filtration unit').e.lastChild;
+const fGood = document.getElementById('fGood'), fBad = document.getElementById('fBad'), statusEl = document.getElementById('status');
+function setFilter(good){
+  mainGood.mesh.visible = branchB.mesh.visible = good;
+  badFlow.mesh.visible = !good;
+  faucetStreams.forEach(m=>m.visible = good); faucetRipples.forEach(m=>m.visible = good);
+  filterGlass.color.set(good ? 0x86cfff : 0xff8f80); crack.visible = !good;
+  fGood.setAttribute('aria-pressed', String(good)); fBad.setAttribute('aria-pressed', String(!good));
+  filterTag.textContent = good ? 'Filtration unit' : 'Filtration unit (broken)';
+  statusEl.textContent = good ? 'Filter good: clean water moves on to the checking tank, the storage tank and the plant bed.' : 'Filter broken: the water is discharged through the drain and does not reach the checking tank.';
+}
+fGood.onclick = () => setFilter(true); fBad.onclick = () => setFilter(false);
+setFilter(true);
+
+/* ---------- loop ---------- */
+const clock = new THREE.Clock();
+flows.forEach(f=>f.update(0));
+function tick(){
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
+  if(playing){
+    flowT += dt*speed; flows.forEach(f=>f.update(flowT));
+    stripe.offset.y -= dt*speed*1.6;
+    for(const r of ripples){ const k = (flowT*.9 + r.ph) % 1; r.m.scale.setScalar(.03 + k*.15); r.m.material.opacity = .7*(1-k); }
+  }
+  for(const p of plants){ p.g.rotation.z = Math.sin(t*1.1+p.ph)*.035; p.g.rotation.x = Math.cos(t*.9+p.ph)*.025; }
+  __led.material.opacity = .65 + .35*Math.sin(t*3);
+  if(tween){
+    tween.t = Math.min(1, tween.t + dt/.9); const k = tween.t<.5 ? 4*tween.t**3 : 1-(-2*tween.t+2)**3/2;
+    camera.position.lerpVectors(tween.from, tween.to, k); controls.target.copy(TARGET);
+    if(tween.t>=1) tween = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  placeLabels();
+}
+tick();
+</script>
+
+</body></html>
