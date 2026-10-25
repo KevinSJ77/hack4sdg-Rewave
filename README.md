@@ -62,7 +62,7 @@ No additional installation or backend setup is required.
 | Name | Contribution |
 |---|---|
 | Kevin Saji Joseph | Team Lead & Simulation Development |
-| Ruchi Umesh | UI/UX Design |
+| Ruchi Umesh | Website Development & UI/UX Design |
 | Rehan Sayyed | Simulation Development |
 | Thanushka T | Website Development & UI/UX Design |
 
