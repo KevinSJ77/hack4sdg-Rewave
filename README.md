@@ -57,20 +57,18 @@ https://kevinsj77.github.io/hack4sdg-Rewave/Water%20Filtration%20Model%20%281%29
 
 No additional installation or backend setup is required.
 
-👥 Team Members
+## 👥 Team Members
 
-Name| Contribution
-[Kevin Saji Joseph]  
-[Team Lead & Simulation Development]
-[Ruchi Umesh]   
-[Website Development & UI Design]
-[Rehan Sayyed]| 
-[Simulation Development]
-[Thanushka T]|  
-[Website Development & UI Design]
+| Name | Contribution |
+|---|---|
+| Kevin Saji Joseph | Team Lead & Simulation Development |
+| Ruchi Umesh | UI/UX Design |
+| Rehan Sayyed | Simulation Development |
+| Thanushka T | Website Development & UI/UX Design |
 
 ---
 
-REWAVE — Reuse. Renew. Reimagine. 🌱
+**REWAVE — Reuse. Renew. Reimagine. 🌱**
 
 An interactive prototype supporting SDG 6.
+
