@@ -60,10 +60,14 @@ No additional installation or backend setup is required.
 👥 Team Members
 
 Name| Contribution
-[Kevin Saji Joseph]   [Team Lead & Simulation Development]
-[Ruchi Umesh]         [Website Development & UI Design]
-[Rehan Sayyed]|       [Simulation Development]
-[Thanushka T]|        [Website Development & UI Design]
+[Kevin Saji Joseph]  
+[Team Lead & Simulation Development]
+[Ruchi Umesh]   
+[Website Development & UI Design]
+[Rehan Sayyed]| 
+[Simulation Development]
+[Thanushka T]|  
+[Website Development & UI Design]
 
 ---
 
